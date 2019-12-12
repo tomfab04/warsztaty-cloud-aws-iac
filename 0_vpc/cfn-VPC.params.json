@@ -1,0 +1,22 @@
+[
+  {
+    "ParameterKey": "VPCNameParameter",
+    "ParameterValue": "wp-vpc"
+  },
+  {
+    "ParameterKey": "VpcCidrPrefixParameter",
+    "ParameterValue": "172.19"
+  },
+  {
+    "ParameterKey": "VPCAZ1NameParameter",
+    "ParameterValue": "eu-west-1a"
+  },
+  {
+    "ParameterKey": "VPCAZ2NameParameter",
+    "ParameterValue": "eu-west-1b"
+  },
+  {
+    "ParameterKey": "S3EndpointRegionParameter",
+    "ParameterValue": "eu-west-1"
+  }
+]

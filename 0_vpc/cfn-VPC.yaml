@@ -1,0 +1,240 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: 'Creates new VPC, subnets, Internet Gateway, NAT and S3 Service Endpoint.'
+
+
+Parameters:
+
+  VPCNameParameter:
+    Type: String
+    Description: 'Enter unique name for new production VPC.'
+    Default: 'wp-vpc'
+
+  VpcCidrPrefixParameter:
+    Type: String
+    Description: 'Enter first two octets of IPv4 CIDR for new VPC, eg. 172.17'
+    Default: '172.19'
+
+  VPCAZ1NameParameter:
+    Type: 'AWS::EC2::AvailabilityZone::Name'
+    Description: 'Name of first Availability Zone'
+    Default: 'eu-west-1a'
+
+  VPCAZ2NameParameter:
+    Type: 'AWS::EC2::AvailabilityZone::Name'
+    Description: 'Name of second Availability Zone'
+    Default: 'eu-west-1b'
+
+  S3EndpointRegionParameter:
+    Type: String
+    Description: 'Enter S3 endpoint region - same as VPC.'
+    Default: 'eu-west-1'
+
+
+Resources:
+
+  VPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: !Join [ '.', [ !Ref VpcCidrPrefixParameter, '0.0/16' ] ]
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      InstanceTenancy: default
+      Tags:
+      - Key: Name
+        Value: !Ref VPCNameParameter
+
+  AZ1PublicSubnet:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Ref VPCAZ1NameParameter
+      CidrBlock: !Join [ '.', [ !Ref VpcCidrPrefixParameter, '0.0/24' ] ]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: 'AZ1 Public Subnet'
+
+  AZ2PublicSubnet:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Ref VPCAZ2NameParameter
+      CidrBlock: !Join [ '.', [ !Ref VpcCidrPrefixParameter, '1.0/24' ] ]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: 'AZ2 Public Subnet'
+
+  AZ1PrivateSubnet:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Ref VPCAZ1NameParameter
+      CidrBlock: !Join [ '.', [ !Ref VpcCidrPrefixParameter, '2.0/24' ] ]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: 'AZ1 Private Subnet'
+
+  AZ2PrivateSubnet:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Ref VPCAZ2NameParameter
+      CidrBlock: !Join [ '.', [ !Ref VpcCidrPrefixParameter, '3.0/24' ] ]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: 'AZ2 Private Subnet'
+
+
+  InternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+      - Key: Name
+        Value: !Join [ '', [ !Ref VPCNameParameter, '-igw' ] ]
+
+  VPCGatewayAttachment:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicRT:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: 'Public Route Table'
+
+  PublicRouteToIgw:
+    Type: 'AWS::EC2::Route'
+    DependsOn: InternetGateway
+    Properties:
+      RouteTableId: !Ref PublicRT
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId: !Ref InternetGateway
+
+  AZ1SubnetRTAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      RouteTableId: !Ref PublicRT
+      SubnetId: !Ref AZ1PublicSubnet
+
+  AZ2SubnetRTAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      RouteTableId: !Ref PublicRT
+      SubnetId: !Ref AZ2PublicSubnet
+
+
+  AZ1NatEIP:
+    Type: 'AWS::EC2::EIP'
+    Properties:
+      Domain: vpc
+
+  AZ1NatGateway:
+    Type: 'AWS::EC2::NatGateway'
+    Properties:
+      SubnetId: !Ref AZ1PublicSubnet
+      AllocationId:
+        Fn::GetAtt:
+        - AZ1NatEIP
+        - AllocationId
+      Tags:
+      - Key: Name
+        Value: 'AZ1 NAT Gateway for private subnets'
+
+  AZ1NatRT:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: 'AZ1 NAT Route Table'
+
+  AZ1PrivateRouteToNatGw:
+    Type: 'AWS::EC2::Route'
+    DependsOn: AZ1NatGateway
+    Properties:
+      RouteTableId: !Ref AZ1NatRT
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId: !Ref AZ1NatGateway
+
+  AZ1PrivateSubnetRTAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      RouteTableId: !Ref AZ1NatRT
+      SubnetId: !Ref AZ1PrivateSubnet
+
+
+  AZ2NatEIP:
+    Type: 'AWS::EC2::EIP'
+    Properties:
+      Domain: vpc
+
+  AZ2NatGateway:
+    Type: 'AWS::EC2::NatGateway'
+    Properties:
+      SubnetId: !Ref AZ2PublicSubnet
+      AllocationId:
+        Fn::GetAtt:
+        - AZ2NatEIP
+        - AllocationId
+      Tags:
+      - Key: Name
+        Value: 'AZ2 NAT Gateway for private subnets'
+
+  AZ2NatRT:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: 'AZ2 NAT Route Table'
+
+  AZ2PrivateRouteToNatGw:
+    Type: 'AWS::EC2::Route'
+    DependsOn: AZ2NatGateway
+    Properties:
+      RouteTableId: !Ref AZ2NatRT
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId: !Ref AZ2NatGateway
+
+  AZ2PrivateSubnetRTAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      RouteTableId: !Ref AZ2NatRT
+      SubnetId: !Ref AZ2PrivateSubnet
+
+
+  AWSServicesEndpoint:
+    Type: 'AWS::EC2::VPCEndpoint'
+    Properties: 
+      ServiceName: !Join [ '.', [ 'com.amazonaws', !Ref S3EndpointRegionParameter, 's3' ] ]
+      VpcId: !Ref VPC
+      RouteTableIds:
+        - !Ref AZ1NatRT
+        - !Ref AZ2NatRT
+
+
+Outputs:
+
+  AZ1PublicSubnetId:
+    Description: Public subnet ID in AZ1
+    Value: !Ref AZ1PublicSubnet
+
+  AZ2PublicSubnetId:
+    Description: Public subnet ID in AZ1
+    Value: !Ref AZ2PublicSubnet
+
+  AZ1PrivateSubnetId:
+    Description: Public subnet ID in AZ1
+    Value: !Ref AZ1PrivateSubnet
+
+  AZ2PrivateSubnetId:
+    Description: Public subnet ID in AZ1
+    Value: !Ref AZ2PrivateSubnet
