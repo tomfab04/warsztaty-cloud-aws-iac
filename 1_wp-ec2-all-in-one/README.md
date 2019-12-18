@@ -2,7 +2,8 @@
 
 Tworzenie Instancji WordPress
 
-Linux:
+
+**Linux:**
 ```
 aws cloudformation create-stack \
   --stack-name WP-instance \
@@ -12,11 +13,21 @@ aws cloudformation create-stack \
 ```
 
 
-Windows:
+**Windows CMD:**
 ```
 aws cloudformation create-stack ^
   --stack-name WP-instance ^
   --template-body file://cfn-app.yaml ^
   --parameters file://cfn-app.params.json ^
+  --profile <profile_name> --region eu-west-1
+```
+
+
+**Windows Power Shell:**
+```
+aws cloudformation create-stack `
+  --stack-name WP-instance `
+  --template-body file://cfn-app.yaml `
+  --parameters file://cfn-app.params.json `
   --profile <profile_name> --region eu-west-1
 ```
