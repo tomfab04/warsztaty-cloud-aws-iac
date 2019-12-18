@@ -223,6 +223,10 @@ Resources:
 
 Outputs:
 
+  VpcId:
+    Description: VPC ID
+    Value: !Ref VPC
+
   AZ1PublicSubnetId:
     Description: Public subnet ID in AZ1
     Value: !Ref AZ1PublicSubnet
