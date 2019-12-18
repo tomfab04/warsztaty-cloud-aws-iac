@@ -1,0 +1,221 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: Template that creates EC2 App servers.
+
+
+Parameters:
+
+  VpcIdParam:
+    Description: ID of VPC where to create ALB and SG
+    Type: String
+    Default: ""
+
+  AppAZ1SubnetIdParam:
+    Type: String
+    Default: ""
+
+  EnvironmentNameParam:
+    Description: Environment short name
+    Type: String
+    Default: 'wp'
+
+  EnvironmentTypeParam:
+    Description: Environment tag Value
+    Type: String
+    Default: dev
+    AllowedValues:
+      - prod
+      - dev
+      - test
+      - qa
+      - stage
+    ConstraintDescription: must be 'prod', 'dev', 'test', 'qa' or 'stage'
+
+  VpcIdExportNameParam:
+    Description: VPC CloudFromation stack export name
+    Type: String
+    Default: ""
+
+  AppAZ1SubnetIdExportNameParam:
+    Type: String
+    Default: ""
+
+  AppSrvInstanceTypeParam:
+    Description: Application server instance type
+    Type: String
+    Default: t3.small
+    AllowedValues:
+      - t3.micro
+      - t3.small
+      - t3.medium
+      - t3.large
+      - t3.xlarge
+      - t2.micro
+      - t2.small
+      - t2.medium
+      - t2.large
+      - t2.xlarge
+      - r5.large
+      - r5.xlarge
+      - m5.large
+      - m5.xlarge
+      - m5.2xlarge
+    ConstraintDescription: pick one from the list
+
+  AppSrvAmiIdParam:
+    Description: App server AMI ID to start from.
+    Type: AWS::EC2::Image::Id
+    AllowedValues:
+      - ami-071da4db96331dcee
+      - ami-0cc0a36f626a4fdf5
+      - ami-0f57376953b065e2c
+    ConstraintDescription: pick one from the list
+    Default: ami-0cc0a36f626a4fdf5
+
+  AppSrvKeyPairNameParam:
+    Description: EC2 Key Pair name to ssh login.
+    Type: AWS::EC2::KeyPair::KeyName
+
+  MaintenanceCidrIpParam:
+    Description: CIDR of local network to allow SSH access to app servers
+    Type: String
+    Default: "192.168.0.0/16"
+
+
+Metadata:
+
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Parameters:
+          - EnvironmentTypeParam
+          - EnvironmentNameParam
+      - Parameters:
+          - AppSrvKeyPairNameParam
+          - AppSrvInstanceTypeParam
+          - MaintenanceCidrIpParam
+      - Parameters:
+          - VpcIdParam
+          - AppAZ1SubnetIdParam
+      - Parameters:
+          - VpcIdExportNameParam
+          - AppAZ1SubnetIdExportNameParam
+
+
+Conditions:
+
+  IfVpcIdExportParam:
+    !Not [ !Equals [ '', !Ref VpcIdExportNameParam ] ]
+
+  IfAZ1SubnetIdExportParam:
+    !Not [ !Equals [ '', !Ref AppAZ1SubnetIdExportNameParam ] ]
+
+
+Resources:
+
+  AppSrvSG:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties: 
+      GroupName: !Join [ '-', [ !Ref EnvironmentNameParam, !Ref EnvironmentTypeParam, 'appsrv-sg' ] ]
+      GroupDescription: SG that allows traffic to application servers from Application Load Balancer.
+      VpcId:
+        Fn::If:
+        - IfVpcIdExportParam
+        - Fn::ImportValue: !Ref VpcIdExportNameParam
+        - !Ref VpcIdParam
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [ !Ref EnvironmentNameParam, !Ref EnvironmentTypeParam, 'appsrv' ] ]
+        - Key: Environment
+          Value: !Ref EnvironmentTypeParam
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: !Ref MaintenanceCidrIpParam
+          Description: 'Allow SSH traffic from maintenance CIDR IP range'
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp: '0.0.0.0/0'
+          Description: 'Allow HTTP traffic'
+        - IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: '0.0.0.0/0'
+          Description: 'Allow HTTPS traffic'
+
+  AppSrvSGSelfRule:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: 
+      GroupId: !Ref AppSrvSG
+      IpProtocol: tcp
+      FromPort: '0'
+      ToPort: '65535'
+      SourceSecurityGroupId: !Ref AppSrvSG
+      Description: 'Allow TCP traffic on all ports from the same SG'
+
+  AppSrv1Ec2:
+    Type: AWS::EC2::Instance
+    Properties: 
+      ImageId: !Ref AppSrvAmiIdParam
+      InstanceType: !Ref AppSrvInstanceTypeParam
+      CreditSpecification:
+        CPUCredits: unlimited
+      KeyName: !Ref AppSrvKeyPairNameParam
+      InstanceInitiatedShutdownBehavior: stop
+        #Volumes: 
+      #  - EC2 MountPoint
+      SubnetId: !Ref AppAZ1SubnetIdParam
+      SecurityGroupIds:
+        - !Ref AppSrvSG
+      Tags: 
+        - Key: Name
+          Value: !Join [ '-', [ !Ref EnvironmentNameParam, !Ref EnvironmentTypeParam, 'appsrv-1' ] ]
+        - Key: Environment
+          Value: !Ref EnvironmentTypeParam
+        - Key: Backup
+          Value: daily
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+
+
+
+
+Outputs:
+
+  AppSrvSGOutput:
+    Description: Application servers security group ID
+    Value: !Ref AppSrvSG
+    Export:
+      Name: !Join [ '-', [ !Ref EnvironmentNameParam, !Ref EnvironmentTypeParam, 'appsrv-sg' ] ]
+
+  AppSrv1IdOutput:
+    Description: Application server's instance ID
+    Value: !Ref AppSrv1Ec2
+    Export:
+      Name: !Join [ '-', [ !Ref EnvironmentNameParam, !Ref EnvironmentTypeParam, 'appsrv1-instanceId' ] ]
+
+  AppSrv1IpOutput:
+    Description: Application server's private IP address
+    Value: !GetAtt AppSrv1Ec2.PrivateIp
+    Export:
+      Name: !Join [ '-', [ !Ref EnvironmentNameParam, !Ref EnvironmentTypeParam, 'appsrv1-ip' ] ]
+
+  AppSrv1PubIpOutput:
+    Description: Application server's public IP address
+    Value: !GetAtt AppSrv1Ec2.PublicIp
+    Export:
+      Name: !Join [ '-', [ !Ref EnvironmentNameParam, !Ref EnvironmentTypeParam, 'appsrv1-pubip' ] ]
+
+  AppSrv1FqdnOutput:
+    Description: Application servers 1 private DNS name
+    Value: !GetAtt AppSrv1Ec2.PrivateDnsName
+    Export:
+      Name: !Join [ '-', [ !Ref EnvironmentNameParam, !Ref EnvironmentTypeParam, 'appsrv1-fqdn' ] ]
+
+  AppSrv1PubFqdnOutput:
+    Description: Application servers 1 private DNS name
+    Value: !GetAtt AppSrv1Ec2.PublicDnsName
+    Export:
+      Name: !Join [ '-', [ !Ref EnvironmentNameParam, !Ref EnvironmentTypeParam, 'appsrv1-pubfqdn' ] ]

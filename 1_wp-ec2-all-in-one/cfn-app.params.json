@@ -1,0 +1,30 @@
+[
+    {
+        "ParameterKey": "EnvironmentNameParam",
+        "ParameterValue": "wordpress"
+    },
+    {
+        "ParameterKey": "EnvironmentTypeParam",
+        "ParameterValue": "dev"
+    },
+    {
+        "ParameterKey": "AppSrvAmiIdParam",
+        "ParameterValue": "ami-071da4db96331dcee"
+    },
+    {
+        "ParameterKey": "AppSrvInstanceTypeParam",
+        "ParameterValue": "t2.micro"
+    },
+    {
+        "ParameterKey": "AppSrvKeyPairNameParam",
+        "ParameterValue": ""
+    },
+    {
+        "ParameterKey": "VpcIdParam",
+        "ParameterValue": ""
+    },
+    {
+        "ParameterKey": "AppAZ1SubnetIdParam",
+        "ParameterValue": ""
+    }
+]
